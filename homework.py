@@ -1,8 +1,8 @@
 import exceptions
+import json
 import logging
 import os
 import requests
-import json
 import telegram
 import time
 
@@ -15,7 +15,7 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 10
+RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -28,7 +28,7 @@ HOMEWORK_STATUSES = {
 logging.basicConfig(
     level=logging.INFO,
     filename='main.log',
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s, %(name)s, %(levelname)s, %(message)s',
 )
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(stream='sys.stdout')
@@ -52,23 +52,21 @@ def get_api_answer(current_timestamp):
     logger.info('Получаем ответ от API Практикума.')
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
+    homework_statuses = requests.get(
+        ENDPOINT, headers=HEADERS, params=params
+    )
+    response = homework_statuses
+    if homework_statuses.status_code != HTTPStatus.OK:
+        logger.error('Код ответ от сервера API не 200')
+        raise exceptions.StatusCodeNot200('Код ответ от сервера API не 200')
     try:
-        homework_statuses = requests.get(
-            ENDPOINT, headers=HEADERS, params=params
+        response = homework_statuses.json()
+    except json.decoder.JSONDecodeError:
+        logger.error('Не можем декодировать ответ от API в JSON')
+        raise exceptions.JsonNotDecode(
+            'Не можем декодировать ответ от API в JSON'
         )
-        if homework_statuses.status_code != HTTPStatus.OK:
-            logger.error('Код ответ от сервера API не 200')
-            raise Exception('Код ответ от сервера API не 200')
-        try:
-            response = homework_statuses.json()
-        except json.decoder.JSONDecodeError:
-            print("Не можем декодировать ответ от API в JSON")
-        return response
-    except exceptions.UnavailableUrl:
-        logger.error(f'При запросе к API возникла ошибка'
-                     f'{homework_statuses.status_code}.')
-        raise exceptions.UnavailableUrl(f'При запросе к API возникла ошибка'
-                                        f'{homework_statuses.status_code}.')
+    return response
 
 
 def check_response(response):
@@ -86,36 +84,37 @@ def check_response(response):
     if not response['homeworks']:
         logger.error('В ответе от API нет значения по ключу homework')
         raise KeyError('В ответе API нет значения по ключу homework')
-    homework = response['homeworks']
-    if type(homework) is not list:
+    if type(response['homeworks']) is not list:
         logger.error('В ответе API нет списка работ')
         raise Exception('В ответе API нет списка работ')
-    return homework
+    homeworks = response['homeworks']
+    return homeworks
 
 
 def parse_status(homework):
     """Извлекаем информацию о конкретной домашней работе."""
     logger.info('Извлекаем информацию о конкретной домашней работе.')
-    try:
-        homework_name = homework.get('homework_name')
-    except exceptions.KeyNotInDict:
-        logger.error('Ключа "homework_name" нет в ответе API')
-        raise exceptions.KeyNotInDict('Ключа "homework_name" нет в ответе API')
-    try:
-        homework_status = homework.get('status')
-    except exceptions.KeyNotInDict:
-        logger.error('Ключа "status" нет в ответе API')
-        raise exceptions.KeyNotInDict('Ключа "status" нет в ответе API')
+    if 'homework_name' not in homework:
+        logger.error('В homework нет ключа "homework_name"')
+        raise KeyError('В homework нет ключа "homework_name"')
+    if not homework['homework_name']:
+        logger.error('В homework нет значения по ключу "homework_name"')
+        raise KeyError('В homework нет значения по ключу "homework_name"')
+    if "status" not in homework:
+        logger.error('В homework нет ключа "status"')
+        raise KeyError('В homework нет ключа "status"')
+    if not homework['status']:
+        logger.error('В homework нет значения по ключу "status"')
+        raise KeyError('В homework нет значения по ключу "status"')
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
     try:
         verdict = HOMEWORK_STATUSES[homework_status]
-    except exceptions.KeyNotInDict:
-        logger.error('Ключа "homework_status" нет в "HOMEWORK_STATUSES"')
+    except KeyError:
+        logger.error('Вердикта нет в "HOMEWORK_STATUSES"')
         raise exceptions.KeyNotInDict(
-            'Ключа "homework_status" нет в "HOMEWORK_STATUSES"'
+            'Статуса нет в "HOMEWORK_STATUSES"'
         )
-    if homework_status not in HOMEWORK_STATUSES:
-        logger.error('Неизвестный статус')
-        raise Exception('Неизвестный статус')
     logger.info(
         f'Изменился статус проверки работы "{homework_name}". {verdict}'
     )
@@ -137,7 +136,7 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     if not check_tokens():
-        logging.critical('Отсутсвуют переменные окружения')
+        logger.critical('Отсутсвуют переменные окружения')
         raise KeyError('Отсутсвуют переменные окружения')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
@@ -145,12 +144,12 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            homework = check_response(response)
-            message = parse_status(homework[0])
+            homeworks = check_response(response)
+            message = parse_status(homeworks[0])
             current_timestamp = response.get('current_date')
         except Exception as error:
             message = f'Сбой в работе телеграмм-бота: {error}'
-            logging.critical(
+            logger.critical(
                 f'Уведомление об ошибке отправлено в чат {message}'
             )
         finally:

@@ -3,7 +3,7 @@ class SendMessedge(Exception):
     pass
 
 
-class UnavailableUrl(Exception):
+class BadHomeworkStatuse(Exception):
     pass
 
 
@@ -11,5 +11,9 @@ class KeyNotInDict(Exception):
     pass
 
 
-class DictExc(Exception):
+class StatusCodeNot200(Exception):
+    pass
+
+
+class JsonNotDecode(Exception):
     pass
