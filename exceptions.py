@@ -17,3 +17,19 @@ class StatusCodeNot200(Exception):
 
 class JsonNotDecode(Exception):
     pass
+
+
+class NotResponse(Exception):
+    pass
+
+
+class HomeworksNotInResponse(Exception):
+    pass
+
+
+class Banana(Exception):
+    pass
+
+
+class FantasyIsOver(Exception):
+    pass

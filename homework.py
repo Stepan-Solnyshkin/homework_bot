@@ -53,10 +53,13 @@ def get_api_answer(current_timestamp):
     logger.info('Получаем ответ от API Практикума.')
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    homework_statuses = requests.get(
-        ENDPOINT, headers=HEADERS, params=params
-    )
-    response = homework_statuses
+    try:
+        homework_statuses = requests.get(
+            ENDPOINT, headers=HEADERS, params=params
+        )
+    except requests.exceptions.RequestException:
+        logger.error('Урл может быть недоступен')
+        raise exceptions.Banana('Урл может быть недоступен')
     if homework_statuses.status_code != HTTPStatus.OK:
         logger.error('Код ответ от сервера API не 200')
         raise exceptions.StatusCodeNot200('Код ответ от сервера API не 200')
@@ -75,21 +78,23 @@ def check_response(response):
     logger.info('Проверяем ответ API на корректность.')
     if not response:
         logger.error('Ответ от API - пустой словарь')
-        raise Exception('Ответ от API - пустой словарь')
+        raise exceptions.NotResponse('Ответ от API - пустой словарь')
     if type(response) is not dict:
         logger.error('Ответ от API не в виде словаря')
+        # тут свое исключение не проходит тесты, не понимаю почему
         raise TypeError('Ответ от API не в виде словаря')
     if 'homeworks' not in response:
         logger.error('В ответе от API нет ключа homework')
-        raise KeyError('В ответе API нет ключа homework')
+        raise exceptions.HomeworksNotInResponse(
+            'В ответе API нет ключа homework'
+        )
     if not response['homeworks']:
         logger.error('В ответе от API нет значения по ключу homework')
-        raise KeyError('В ответе API нет значения по ключу homework')
+        raise exceptions.Banana('В ответе API нет значения по ключу homework')
     if type(response['homeworks']) is not list:
         logger.error('В ответе API нет списка работ')
-        raise Exception('В ответе API нет списка работ')
-    homeworks = response['homeworks']
-    return homeworks
+        raise exceptions.FantasyIsOver('В ответе API нет списка работ')
+    return response['homeworks']
 
 
 def parse_status(homework):
