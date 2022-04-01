@@ -27,9 +27,13 @@ class HomeworksNotInResponse(Exception):
     pass
 
 
-class Banana(Exception):
+class BananaType(TypeError):
     pass
 
 
 class FantasyIsOver(Exception):
+    pass
+
+
+class PetShopBoysError(IndexError):
     pass

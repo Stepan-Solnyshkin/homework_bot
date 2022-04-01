@@ -81,20 +81,17 @@ def check_response(response):
         raise exceptions.NotResponse('Ответ от API - пустой словарь')
     if type(response) is not dict:
         logger.error('Ответ от API не в виде словаря')
-        # тут свое исключение не проходит тесты, не понимаю почему
-        raise TypeError('Ответ от API не в виде словаря')
+        raise exceptions.BananaType('Ответ от API не в виде словаря')
     if 'homeworks' not in response:
         logger.error('В ответе от API нет ключа homework')
         raise exceptions.HomeworksNotInResponse(
             'В ответе API нет ключа homework'
         )
-    if not response['homeworks']:
-        logger.error('В ответе от API нет значения по ключу homework')
-        raise exceptions.Banana('В ответе API нет значения по ключу homework')
-    if type(response['homeworks']) is not list:
+    homeworks_list = response['homeworks']
+    if type(homeworks_list) is not list:
         logger.error('В ответе API нет списка работ')
         raise exceptions.FantasyIsOver('В ответе API нет списка работ')
-    return response['homeworks']
+    return homeworks_list
 
 
 def parse_status(homework):
@@ -150,8 +147,16 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            homeworks = check_response(response)
-            message = parse_status(homeworks[0])
+            homeworks_list = check_response(response)
+            try:
+                (homeworks_list[0])
+            except IndexError:
+                logger.critical('Нет новых работ на проверку :(')
+                raise exceptions.PetShopBoysError(
+                    'Нет новых работ на проверку :('
+                )
+            homework = homeworks_list[0]
+            message = parse_status(homework)
             current_timestamp = response.get('current_date')
         except Exception as error:
             message = f'Сбой в работе телеграмм-бота: {error}'
